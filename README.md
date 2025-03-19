@@ -109,3 +109,42 @@ function approveStage(uint256 _proposalId) external
 - Multi-signature approval for treasury fund releases
 - Soul-bound tokens prevent identity fraud and double-voting
 - Staged funding minimizes risk of fund misuse
+
+## Demo
+
+Here are some snapshots of the Open Government Platform in action:
+
+### Election System
+- **Election Home**  
+  ![Election](Demo/election.png)
+
+- **Election List**  
+  ![Election List](Demo/election-list.png)
+  
+- **Election Administration(Application For SBT Tokens**  
+  ![Election Admin](Demo/election-admin.png)
+
+- **Election Candidate Applications**  
+  ![Election Candidate Applications](Demo/election-candidate-applications.png)
+
+- **Election Candidates Application Status**  
+  ![Election Candidates Application Status](Demo/election-candiadtes-application-status.png)
+
+- **Election Vote**  
+  ![Election Vote](Demo/elction-vote.png)
+
+- **Election Results**  
+  ![Election Results](Demo/elction-results.png)
+
+### Public Fund Management
+- **PFM Home**  
+  ![PFM Home](Demo/pfm-home.png)
+  
+- **PFM Admin Panel**  
+  ![PFM Admin](Demo/pfm-admin.png)
+
+- **PFM Proposal Management**  
+  ![PFM Proposal](Demo/pfm-propsal.png)
+
+- **PFM Reports**  
+  ![PFM Reports](Demo/pfm-report.png)
