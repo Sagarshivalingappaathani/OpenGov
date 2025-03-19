@@ -116,35 +116,35 @@ Here are some snapshots of the Open Government Platform in action:
 
 ### Election System
 - **Election Home**  
-  ![Election](Demo/election.png)
+  ![Election](Screenshots/election.png)
 
 - **Election List**  
-  ![Election List](Demo/election-list.png)
+  ![Election List](Screenshots/election-list.png)
   
 - **Election Administration(Application For SBT Tokens**  
-  ![Election Admin](Demo/election-admin.png)
+  ![Election Admin](Screenshots/election-admin.png)
 
 - **Election Candidate Applications**  
-  ![Election Candidate Applications](Demo/election-candidate-applications.png)
+  ![Election Candidate Applications](Screenshots/election-candidate-applications.png)
 
 - **Election Candidates Application Status**  
-  ![Election Candidates Application Status](Demo/election-candiadtes-application-status.png)
+  ![Election Candidates Application Status](Screenshots/election-candiadtes-application-status.png)
 
 - **Election Vote**  
-  ![Election Vote](Demo/elction-vote.png)
+  ![Election Vote](Screenshots/elction-vote.png)
 
 - **Election Results**  
-  ![Election Results](Demo/elction-results.png)
+  ![Election Results](Screenshots/elction-results.png)
 
 ### Public Fund Management
 - **PFM Home**  
-  ![PFM Home](Demo/pfm-home.png)
+  ![PFM Home](Screenshots/pfm-home.png)
   
 - **PFM Admin Panel**  
-  ![PFM Admin](Demo/pfm-admin.png)
+  ![PFM Admin](Screenshots/pfm-admin.png)
 
 - **PFM Proposal Management**  
-  ![PFM Proposal](Demo/pfm-propsal.png)
+  ![PFM Proposal](Screenshots/pfm-propsal.png)
 
 - **PFM Reports**  
-  ![PFM Reports](Demo/pfm-report.png)
+  ![PFM Reports](Screenshots/pfm-report.png)
