@@ -1,29 +1,22 @@
-"use client";
-
+'use client'
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Contract, BigNumberish, ethers } from "ethers";
+import { Contract, ethers } from "ethers";
 import { Toaster, toast } from "react-hot-toast";
 import { getContract } from "@/lib/votingContract";
 import { getSBTContract } from "@/lib/sbtTokenContract";
 import Link from "next/link";
 import { generateZKProof } from "@/lib/zkUtils";
 
-// Component for loading spinner
+// Loader Component
 const Loader = () => (
   <div className="flex justify-center items-center">
     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-black"></div>
   </div>
 );
 
-// Button component with loading state
-const Button: React.FC<{
-  onClick: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}> = ({ onClick, disabled = false, loading = false, className = "", children }) => (
+// Button Component
+const Button = ({ onClick, disabled = false, loading = false, className = "", children }: any) => (
   <button
     onClick={onClick}
     disabled={disabled || loading}
@@ -34,11 +27,20 @@ const Button: React.FC<{
   </button>
 );
 
-// Define types for candidates and election details
+// Types
 interface Candidate {
   id: number;
   name: string;
+  details: string;
   voteCount: number;
+}
+
+interface Application {
+  applicant: string;
+  name: string;
+  details: string;
+  processed: boolean;
+  approved: boolean;
 }
 
 interface ElectionDetails {
@@ -48,10 +50,12 @@ interface ElectionDetails {
   startTime: number;
   endTime: number;
   candidates: Candidate[];
+  applications: Application[];
   voterCount: number;
 }
 
 export default function ElectionDetailsPage() {
+  // State Management
   const params = useParams();
   const router = useRouter();
   const [electionId, setElectionId] = useState<number | null>(null);
@@ -62,25 +66,34 @@ export default function ElectionDetailsPage() {
     startTime: 0,
     endTime: 0,
     candidates: [],
+    applications: [],
     voterCount: 0,
   });
-  const [newCandidateName, setNewCandidateName] = useState("");
+
+  // Form States
+  const [applicationName, setApplicationName] = useState("");
+  const [applicationDetails, setApplicationDetails] = useState("");
+
+  // User States
   const [isAdmin, setIsAdmin] = useState(false);
   const [userAddress, setUserAddress] = useState("");
   const [hasVoted, setHasVoted] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+
+  // Contract States
   const [votingContract, setVotingContract] = useState<Contract | null>(null);
   const [voterSBTContract, setVoterSBTContract] = useState<Contract | null>(null);
-  const [tokenId, setTokenId] = useState<number | null>(null);
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAddingCandidate, setIsAddingCandidate] = useState(false);
-  const [isStartingElection, setIsStartingElection] = useState(false);
-  const [isStoppingElection, setIsStoppingElection] = useState(false);
-  const [isVoting, setIsVoting] = useState(false);
-
-  // Generate a random nullifier hash for the user (in a real app, this would be derived from a commitment)
   const [nullifierHash, setNullifierHash] = useState<bigint | null>(null);
 
+  // Loading States
+  const [isLoading, setIsLoading] = useState(true);
+  const [isApplying, setIsApplying] = useState(false);
+  const [processingApplications, setProcessingApplications] = useState<{ [key: string]: boolean }>({});
+  const [isStartingElection, setIsStartingElection] = useState(false);
+  const [isStoppingElection, setIsStoppingElection] = useState(false);
+  const [votingCandidateId, setVotingCandidateId] = useState<number | null>(null);
+
+  // Initialize Contract and Load Data
   useEffect(() => {
     if (params.id) {
       const id = typeof params.id === 'string' ? Number(params.id) : Number(params.id[0]);
@@ -89,6 +102,48 @@ export default function ElectionDetailsPage() {
     }
   }, [params.id]);
 
+  // Add this useEffect hook after your other useEffect hooks
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      // Handler for account changes
+      const handleAccountsChanged = async (accounts : any) => {
+        if (accounts.length === 0) {
+          // User disconnected all accounts
+          toast.error("Please connect to MetaMask");
+          router.push('/'); // Redirect to home or connect page
+        } else {
+          // User switched accounts
+          const newAddress = accounts[0];
+          if (newAddress.toLowerCase() !== userAddress.toLowerCase()) {
+            setUserAddress(newAddress);
+            toast.success("Account changed. Refreshing data...");
+
+            // Re-initialize with new account
+            if (votingContract && voterSBTContract && electionId !== null) {
+              await loadElectionDetails(votingContract, voterSBTContract, electionId, newAddress);
+            }
+          }
+        }
+      };
+
+      // Handler for chain changes
+      const handleChainChanged = () => {
+        // Reload the page when chain changes
+        window.location.reload();
+      };
+
+      // Subscribe to events
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+
+      // Clean up event listeners
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, [userAddress, votingContract, voterSBTContract, electionId, router]);
+
   const initializeContract = async () => {
     try {
       setIsLoading(true);
@@ -96,16 +151,14 @@ export default function ElectionDetailsPage() {
       setVotingContract(contract);
       const sbtContract = await getSBTContract();
       setVoterSBTContract(sbtContract);
-      // Get user address
+
       if (typeof window !== 'undefined' && window.ethereum) {
-        // @ts-ignore - ethereum property might not be recognized
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.listAccounts();
         const userAddr = accounts[0].address;
         setUserAddress(userAddr);
         const id = typeof params.id === 'string' ? Number(params.id) : Number(params.id[0]);
         await loadElectionDetails(contract, sbtContract, id, userAddr);
-        
       }
     } catch (error) {
       console.error("Failed to initialize:", error);
@@ -117,98 +170,129 @@ export default function ElectionDetailsPage() {
 
   const loadElectionDetails = async (contract: Contract, sbtContract: Contract, id: number, userAddr: string) => {
     try {
-      // Load election basic info
+      // Load basic election info
       const election = await contract.elections(id);
-      // Check if user is admin
-      const admin = election.admin;
-      setIsAdmin(admin.toLowerCase() === userAddr.toLowerCase());
+      setIsAdmin(election.admin.toLowerCase() === userAddr.toLowerCase());
 
-      // Get candidates
-      const [ids, names, voteCounts] = await contract.getCandidates(id);
+      // Load candidates
+      const [ids, addresses, names, details, voteCounts] = await contract.getCandidates(id);
       const candidatesList = ids.map((id: bigint, index: number) => ({
         id: Number(id),
         name: names[index],
+        details: details[index],
         voteCount: election.isCompleted ? Number(voteCounts[index]) : 0,
       }));
 
-      // Get voter count
+      // Load applications
+      let applications = [];
+      if (userAddr.toLowerCase() === election.admin.toLowerCase()) {
+        const applicationsCount = await contract.getApplicationsCount(id);
+        for (let i = 0; i < Number(applicationsCount); i++) {
+          const [applicant, name, details, processed, approved] = await contract.getApplicationDetails(id, i);
+          applications.push({ applicant, name, details, processed, approved });
+          if (applicant.toLowerCase() === userAddr.toLowerCase()) {
+            setHasApplied(true);
+          }
+        }
+      } else {
+        const hasApplied = await contract.hasApplied(id, userAddr.toLowerCase());
+        console.log(hasApplied);
+        setHasApplied(hasApplied);
+      }
+
+      // Load voter info
       const voterCount = await contract.getVoterCount(id);
-      // Get election times
       const [startTime, endTime] = await contract.getElectionTimes(id);
 
       setElectionDetails({
         name: election.name,
         isActive: election.isActive,
         isCompleted: election.isCompleted,
-        startTime: Number(startTime), // Works for bigint
+        startTime: Number(startTime),
         endTime: Number(endTime),
         candidates: candidatesList,
-        voterCount: Number(voterCount), // Assuming voterCount is still a BigNumber
+        applications,
+        voterCount: Number(voterCount),
       });
 
+      // Check voter status
       const isRegistered = await sbtContract.isRegisteredVoter(userAddr);
-      console.log("isRegistered", isRegistered);
-      console.log("userAddr", userAddr);
-      console.log("id", id);
-
       if (isRegistered) {
         const userNullifier = await sbtContract.getNullifierByAddress(userAddr);
         if (userNullifier) {
           setNullifierHash(userNullifier);
           const isVoted = await contract.isVoted(id, userNullifier);
-          console.log("isVoted", isVoted);
           setHasVoted(isVoted);
         }
       }
-
     } catch (error) {
       console.error("Error loading election details:", error);
       toast.error("Failed to load election details");
     }
   };
 
-  const handleAddCandidate = async () => {``
-    if (!newCandidateName.trim()) {
-      toast.error("Candidate name cannot be empty");
-      return;
-    }
-
-    if (!votingContract) {
-      toast.error("Contract not initialized");
+  // Application Handling
+  const handleApplyAsCandidate = async () => {
+    if (!applicationName.trim() || !applicationDetails.trim()) {
+      toast.error("Please fill in all fields");
       return;
     }
 
     try {
-      setIsAddingCandidate(true);
-      const tx = await votingContract.addCandidate(electionId, newCandidateName);
-      toast.loading("Adding candidate...");
+      setIsApplying(true);
+      const tx = await votingContract?.applyAsCandidate(
+        electionId,
+        applicationName,
+        applicationDetails
+      );
+      toast.loading("Submitting application...");
       await tx.wait();
       toast.dismiss();
-      toast.success("Candidate added successfully");
-      setNewCandidateName("");
-      await loadElectionDetails(votingContract, voterSBTContract as Contract, electionId as number, userAddress);
+      toast.success("Application submitted successfully");
+      setApplicationName("");
+      setApplicationDetails("");
+      setHasApplied(true);
+      await loadElectionDetails(votingContract as Contract, voterSBTContract as Contract, electionId as number, userAddress);
     } catch (error) {
-      console.error("Error adding candidate:", error);
-      toast.error("Failed to add candidate");
+      console.error("Error applying as candidate:", error);
+      toast.error("Failed to submit application");
     } finally {
-      setIsAddingCandidate(false);
+      setIsApplying(false);
     }
   };
 
-  const handleStartElection = async () => {
-    if (!votingContract || electionId === null) {
-      toast.error("Contract not initialized");
-      return;
-    }
+  // Then update the handler function:
+  const handleProcessApplication = async (applicant: string, approved: boolean) => {
+    try {
+      // Create a unique key for this applicant+action combination
+      const actionKey = `${applicant}-${approved ? 'approve' : 'reject'}`;
 
+      setProcessingApplications(prev => ({ ...prev, [actionKey]: true }));
+      const tx = await votingContract?.processApplication(electionId, applicant, approved);
+      toast.loading(`${approved ? 'Approving' : 'Rejecting'} application...`);
+      await tx.wait();
+      toast.dismiss();
+      toast.success(`Application ${approved ? 'approved' : 'rejected'} successfully`);
+      await loadElectionDetails(votingContract as Contract, voterSBTContract as Contract, electionId as number, userAddress);
+    } catch (error) {
+      console.error("Error processing application:", error);
+      toast.error("Failed to process application");
+    } finally {
+      const actionKey = `${applicant}-${approved ? 'approve' : 'reject'}`;
+      setProcessingApplications(prev => ({ ...prev, [actionKey]: false }));
+    }
+  };
+
+  // Election Control Functions
+  const handleStartElection = async () => {
     try {
       setIsStartingElection(true);
-      const tx = await votingContract.startElection(electionId);
+      const tx = await votingContract?.startElection(electionId);
       toast.loading("Starting election...");
       await tx.wait();
       toast.dismiss();
       toast.success("Election started successfully");
-      await loadElectionDetails(votingContract, voterSBTContract as Contract, electionId as number, userAddress);
+      await loadElectionDetails(votingContract as Contract, voterSBTContract as Contract, electionId as number, userAddress);
     } catch (error) {
       console.error("Error starting election:", error);
       toast.error("Failed to start election");
@@ -218,19 +302,14 @@ export default function ElectionDetailsPage() {
   };
 
   const handleStopElection = async () => {
-    if (!votingContract || electionId === null) {
-      toast.error("Contract not initialized");
-      return;
-    }
-
     try {
       setIsStoppingElection(true);
-      const tx = await votingContract.stopElection(electionId);
+      const tx = await votingContract?.stopElection(electionId);
       toast.loading("Ending election...");
       await tx.wait();
       toast.dismiss();
       toast.success("Election ended successfully");
-      await loadElectionDetails(votingContract, voterSBTContract as Contract, electionId, userAddress);
+      await loadElectionDetails(votingContract as Contract, voterSBTContract as Contract, electionId as number, userAddress);
     } catch (error) {
       console.error("Error stopping election:", error);
       toast.error("Failed to end election");
@@ -239,32 +318,16 @@ export default function ElectionDetailsPage() {
     }
   };
 
-  // Add this function to your ElectionDetailsPage component
-  const handleVote = async (candidateId: number, electionId: number) => {
-    if (!votingContract) {
-      toast.error("Contract not initialized");
-      return;
-    }
-
+  const handleVote = async (candidateId: number) => {
     try {
-      setIsVoting(true);
+      setVotingCandidateId(candidateId);
       toast.loading("Preparing your anonymous vote...");
-      if (!voterSBTContract) {
-        toast.error("SBT contract not initialized");
-        return;
-      }
-      // 1. Get the user's SBT token ID - this should be kept private
-      const tokenId = await voterSBTContract.getTokenIdByAddress(userAddress);
-      setTokenId(tokenId);
-      console.log("Generating zero-knowledge proof...");
 
-      // 2. Generate ZK proof and nullifier hash
-      const { proof, nullifierHash } = await generateZKProof(tokenId, electionId);
-      const currentNullifierHash = await voterSBTContract.getNullifierByAddress(userAddress);
-      console.log(proof);
-      // 3. Prepare the proof for the contract
-      // The zkVote function expects proof components (a, b, c) and the nullifier hash
-      const tx = await votingContract.zkVote(
+      const tokenId = await voterSBTContract?.getTokenIdByAddress(userAddress);
+      const { proof } = await generateZKProof(tokenId, electionId as number);
+      const currentNullifierHash = await voterSBTContract?.getNullifierByAddress(userAddress);
+
+      const tx = await votingContract?.zkVote(
         electionId,
         candidateId,
         proof.a,
@@ -273,23 +336,18 @@ export default function ElectionDetailsPage() {
         currentNullifierHash
       );
 
-      toast.dismiss();
       toast.loading("Casting your anonymous vote...");
-
       await tx.wait();
-
       toast.dismiss();
-      toast.success("Vote cast successfully and anonymously!");
+      toast.success("Vote cast successfully!");
 
-      // 4. Reload election details
-      await loadElectionDetails(votingContract, voterSBTContract, electionId, userAddress);
+      await loadElectionDetails(votingContract as Contract, voterSBTContract as Contract, electionId as number, userAddress);
       setHasVoted(true);
     } catch (error) {
       console.error("Error casting vote:", error);
-      toast.dismiss();
-      toast.error("An error occurred while casting your vote. Please try again.");
+      toast.error("Failed to cast vote");
     } finally {
-      setIsVoting(false);
+      setVotingCandidateId(null);
     }
   };
 
@@ -301,131 +359,201 @@ export default function ElectionDetailsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
-          <p className="mt-4 text-gray-700">Loading election details...</p>
-        </div>
+        <Loader />
+        <p className="ml-2">Loading election details...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <Link href="/dashboard/election" className="text-gray-600 hover:text-black">
-          ← Back to Elections
+      <div className="mb-8">
+        <Link href="/dashboard/election" className="inline-flex items-center text-gray-600 hover:text-black transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Elections
         </Link>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h1 className="text-3xl font-bold mb-2">{electionDetails.name}</h1>
+      {/* Election Header */}
+      <div className="bg-white shadow-md rounded-xl p-8 mb-8">
+        <h1 className="text-3xl font-bold mb-6 border-b pb-4">{electionDetails.name}</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
-            <p className="text-gray-600">Status:
-              <span className={`ml-2 font-medium ${electionDetails.isCompleted ? "text-black" :
-                electionDetails.isActive ? "text-green-600" : "text-yellow-600"
+            <div className="flex items-center mb-3">
+              <span className="text-gray-700 font-medium w-32">Status:</span>
+              <span className={`font-semibold px-3 py-1 rounded-full text-sm ${electionDetails.isCompleted ? "bg-gray-200 text-gray-800" :
+                electionDetails.isActive ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
                 }`}>
                 {electionDetails.isCompleted ? "Completed" :
                   electionDetails.isActive ? "Active" : "Not Started"}
               </span>
-            </p>
-            <p className="text-gray-600">Total Voters: <span className="font-medium">{electionDetails.voterCount}</span></p>
+            </div>
+            <div className="flex items-center">
+              <span className="text-gray-700 font-medium w-32">Total Voters:</span>
+              <span className="font-semibold">{electionDetails.voterCount}</span>
+            </div>
           </div>
           <div>
-            <p className="text-gray-600">Start Time: <span className="font-medium">{formatDate(electionDetails.startTime)}</span></p>
-            <p className="text-gray-600">End Time: <span className="font-medium">{formatDate(electionDetails.endTime)}</span></p>
+            <div className="flex items-center mb-3">
+              <span className="text-gray-700 font-medium w-32">Start Time:</span>
+              <span className="font-semibold">{formatDate(electionDetails.startTime)}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-gray-700 font-medium w-32">End Time:</span>
+              <span className="font-semibold">{formatDate(electionDetails.endTime)}</span>
+            </div>
           </div>
         </div>
 
-        {/* Admin Controls */}
-        {isAdmin && !electionDetails.isActive && !electionDetails.isCompleted && (
-          <div className="bg-gray-50 p-4 rounded-md mb-6">
-            <h2 className="text-xl font-semibold mb-4">Admin Controls</h2>
-
-            <div className="mb-4">
-              <h3 className="font-medium mb-2">Add Candidate</h3>
-              <div className="flex">
+        {/* Application Form */}
+        {electionDetails && !electionDetails.isActive && !electionDetails.isCompleted && !hasApplied && !isAdmin && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8 shadow-md">
+            <h2 className="text-xl font-bold mb-6">Apply as Candidate</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Name
+                </label>
                 <input
                   type="text"
-                  value={newCandidateName}
-                  onChange={(e) => setNewCandidateName(e.target.value)}
-                  placeholder="Candidate Name"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-l focus:outline-none focus:ring-1 focus:ring-black"
+                  value={applicationName}
+                  onChange={(e) => setApplicationName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                  placeholder="Your name"
                 />
-                <Button
-                  onClick={handleAddCandidate}
-                  loading={isAddingCandidate}
-                  className="rounded-l-none"
-                >
-                  Add
-                </Button>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Details
+                </label>
+                <textarea
+                  value={applicationDetails}
+                  onChange={(e) => setApplicationDetails(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                  placeholder="Tell us about yourself"
+                  rows={4}
+                />
+              </div>
+              <Button
+                onClick={handleApplyAsCandidate}
+                loading={isApplying}
+                disabled={!applicationName.trim() || !applicationDetails.trim()}
+                className="w-full py-3 bg-black hover:bg-gray-800 text-white font-medium rounded-lg transition-all"
+              >
+                Submit Application
+              </Button>
             </div>
+          </div>
+        )}
 
-            <div>
+        {/* Admin Application Management */}
+        {electionDetails && isAdmin && !electionDetails.isActive && !electionDetails.isCompleted && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8 shadow-lg">
+            <h2 className="text-xl font-bold mb-6">Candidate Applications</h2>
+            {electionDetails.applications.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p>No applications submitted yet</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {electionDetails.applications.map((application, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow bg-gray-50">
+                    <h3 className="font-semibold text-lg mb-1">{application.name}</h3>
+                    <p className="text-gray-600 mb-4">{application.details}</p>
+                    {!application.processed && (
+                      <div className="flex space-x-3">
+                        <Button
+                          onClick={() => handleProcessApplication(application.applicant, true)}
+                          loading={processingApplications[`${application.applicant}-approve`]}
+                          className="bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2 transition-all"
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          onClick={() => handleProcessApplication(application.applicant, false)}
+                          loading={processingApplications[`${application.applicant}-reject`]}
+                          className="bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2 transition-all"
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {application.processed && (
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm ${application.approved ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                        {application.approved ? "Approved" : "Rejected"}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-8 pt-6 border-t border-gray-200">
               <Button
                 onClick={handleStartElection}
                 loading={isStartingElection}
                 disabled={electionDetails.candidates.length === 0}
+                className="w-full py-3 bg-black hover:bg-gray-800 text-white font-medium rounded-lg transition-all disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Start Election
               </Button>
               {electionDetails.candidates.length === 0 && (
-                <p className="text-red-500 text-sm mt-2">Add at least one candidate to start the election</p>
+                <p className="text-red-600 text-sm mt-2 text-center">
+                  Please approve at least one candidate to start the election
+                </p>
               )}
             </div>
           </div>
         )}
 
         {/* Admin Stop Controls */}
-        {isAdmin && electionDetails.isActive && !electionDetails.isCompleted && (
-          <div className="bg-gray-50 p-4 rounded-md mb-6">
-            <h2 className="text-xl font-semibold mb-4">Admin Controls</h2>
+        {electionDetails && isAdmin && electionDetails.isActive && !electionDetails.isCompleted && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8 shadow-lg">
+            <h2 className="text-xl font-bold mb-6">Admin Controls</h2>
             <Button
               onClick={handleStopElection}
               loading={isStoppingElection}
-              className="bg-red-600 hover:bg-red-700"
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-all"
             >
               End Election
             </Button>
           </div>
         )}
 
-        {/* Election Not Started Message */}
-        {!electionDetails.isActive && !electionDetails.isCompleted && !isAdmin && (
-          <div className="bg-yellow-50 p-4 rounded-md mb-6 text-center">
-            <p className="text-yellow-700">
-              This election has not started yet. Please check back later.
-            </p>
-          </div>
-        )}
-
         {/* Voting Interface */}
-        {electionDetails.isActive && !electionDetails.isCompleted && (
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold mb-4">Cast Your Vote</h2>
-
+        {electionDetails && electionDetails.isActive && !electionDetails.isCompleted && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold mb-6">Cast Your Vote</h2>
             {hasVoted ? (
-              <div className="bg-green-50 p-4 rounded-md text-center">
-                <p className="text-green-700">
-                  You have already cast your vote in this election. Thank you for participating!
+              <div className="bg-green-50 border border-green-100 p-6 rounded-xl text-center shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <p className="text-green-800 font-medium">
+                  Thank you for voting! Your vote has been recorded anonymously.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {electionDetails.candidates.map((candidate) => (
                   <div
                     key={candidate.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-black transition-colors"
+                    className="bg-white border border-gray-200 hover:border-black rounded-xl p-6 hover:shadow-md transition-all"
                   >
-                    <h3 className="font-medium mb-2">{candidate.name}</h3>
+                    <h3 className="font-semibold text-lg mb-3">{candidate.name}</h3>
+                    <p className="text-gray-600 mb-6">{candidate.details}</p>
                     <Button
-                      onClick={() => handleVote(candidate.id, electionId as number)}
-                      loading={isVoting}
-                      className="w-full"
+                      onClick={() => handleVote(candidate.id)}
+                      loading={votingCandidateId === candidate.id}
+                      className="w-full py-3 bg-black hover:bg-gray-800 text-white font-medium rounded-lg transition-all"
                     >
-                      Vote
+                      Vote for {candidate.name}
                     </Button>
                   </div>
                 ))}
@@ -435,28 +563,41 @@ export default function ElectionDetailsPage() {
         )}
 
         {/* Results Display */}
-        {electionDetails.isCompleted && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Election Results</h2>
+        {electionDetails && electionDetails.isCompleted && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8 shadow-lg">
+            <h2 className="text-xl font-bold mb-6">Election Results</h2>
 
-            <div className="mb-6">
-              <div className="bg-gray-50 p-4 rounded-md">
-                <h3 className="font-medium mb-3">Final Tally</h3>
-                <div className="space-y-4">
+            {electionDetails.voterCount === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="font-medium">No votes were cast in this election.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-6 mb-8">
                   {electionDetails.candidates.map((candidate) => {
                     const percentage = electionDetails.voterCount > 0
                       ? ((candidate.voteCount / electionDetails.voterCount) * 100).toFixed(1)
                       : "0";
 
+                    const isWinner = candidate.voteCount === Math.max(...electionDetails.candidates.map(c => c.voteCount)) && candidate.voteCount > 0;
+
                     return (
-                      <div key={candidate.id}>
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">{candidate.name}</span>
-                          <span>{candidate.voteCount} votes ({percentage}%)</span>
+                      <div key={candidate.id} className={`p-5 rounded-lg ${isWinner ? 'bg-gray-50 border border-gray-200' : ''}`}>
+                        <div className="flex justify-between mb-2">
+                          <span className={`font-semibold text-lg ${isWinner ? 'text-black' : 'text-gray-700'}`}>
+                            {candidate.name}
+                            {isWinner && (
+                              <span className="ml-2 text-sm bg-black text-white px-2 py-1 rounded">Winner</span>
+                            )}
+                          </span>
+                          <span className="font-medium">{candidate.voteCount} votes ({percentage}%)</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                           <div
-                            className="bg-black h-2.5 rounded-full"
+                            className={`h-3 rounded-full ${isWinner ? 'bg-black' : 'bg-gray-400'}`}
                             style={{ width: `${percentage}%` }}
                           ></div>
                         </div>
@@ -464,40 +605,37 @@ export default function ElectionDetailsPage() {
                     );
                   })}
                 </div>
-              </div>
-            </div>
 
-            <div className="text-center">
-              {(() => {
-                // Find winner(s)
-                if (electionDetails.voterCount === 0) {
-                  return <p className="text-gray-600">No votes were cast in this election.</p>;
-                }
+                <div className="text-center pt-6 border-t border-gray-200">
+                  {(() => {
+                    const maxVotes = Math.max(...electionDetails.candidates.map(c => c.voteCount));
+                    const winners = electionDetails.candidates.filter(c => c.voteCount === maxVotes);
 
-                const maxVotes = Math.max(...electionDetails.candidates.map(c => c.voteCount));
-                const winners = electionDetails.candidates.filter(c => c.voteCount === maxVotes);
-
-                if (winners.length > 1) {
-                  return (
-                    <div>
-                      <h3 className="text-xl font-bold mb-2">It's a tie!</h3>
-                      <p>
-                        {winners.map(w => w.name).join(' and ')} have tied with {maxVotes} votes each.
-                      </p>
-                    </div>
-                  );
-                } else if (winners.length === 1) {
-                  return (
-                    <div>
-                      <h3 className="text-xl font-bold mb-2">Winner: {winners[0].name}</h3>
-                      <p>With {winners[0].voteCount} votes ({((winners[0].voteCount / electionDetails.voterCount) * 100).toFixed(1)}%)</p>
-                    </div>
-                  );
-                } else {
-                  return <p className="text-gray-600">No candidates found.</p>;
-                }
-              })()}
-            </div>
+                    if (winners.length > 1) {
+                      return (
+                        <div>
+                          <h3 className="text-xl font-bold mb-2">It's a tie!</h3>
+                          <p className="text-gray-700">
+                            {winners.map(w => w.name).join(' and ')} have tied with {maxVotes} votes each.
+                          </p>
+                        </div>
+                      );
+                    } else if (winners.length === 1) {
+                      return (
+                        <div>
+                          <h3 className="text-xl font-bold mb-2">Winner: {winners[0].name}</h3>
+                          <p className="text-gray-700">
+                            With {winners[0].voteCount} votes
+                            ({((winners[0].voteCount / electionDetails.voterCount) * 100).toFixed(1)}%)
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

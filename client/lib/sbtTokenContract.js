@@ -346,6 +346,19 @@ const contractABI = [
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "getVoterCount",
+      "outputs": [
+        {
+          "internalType": "uint128",
+          "name": "",
+          "type": "uint128"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",

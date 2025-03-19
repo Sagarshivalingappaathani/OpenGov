@@ -1,4 +1,3 @@
-// lib/zkUtils.js
 import { groth16 } from 'snarkjs';
 
 export async function generateZKProof(tokenId, electionId) {
@@ -9,12 +8,10 @@ export async function generateZKProof(tokenId, electionId) {
       electionId: electionId.toString()
     };
 
-    // Calculate witness and generate proof
-    // These paths would be to your compiled circuit artifacts
     const { proof, publicSignals } = await groth16.fullProve(
       input,
-      "/circuit/vote_circuit.wasm",  // Path to your compiled circuit
-      "/circuit/circuit_final.zkey"  // Path to your proving key
+      "/circuit/vote_circuit.wasm",  
+      "/circuit/circuit_final.zkey"  
     );
     console.log("Proof generated successfully");
     // Format the proof for the smart contract

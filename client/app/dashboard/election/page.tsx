@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getContract } from '@/lib/votingContract';
 import { getSBTContract } from '@/lib/sbtTokenContract';
 import { Contract, ethers } from 'ethers';
-import { AlertCircle, ExternalLink, Loader2, Shield, Lock, FileCheck, Vote, Key, CheckCircle, Users, BarChart3, Clock, Zap } from 'lucide-react';
+import { Home, Loader2, Users, CheckCircle, Send, Wallet, ExternalLink, UserCheck, Shield, CircleDollarSign, FileCheck } from 'lucide-react';
 
 import { toast } from 'react-hot-toast';
 
@@ -65,6 +65,11 @@ const VotingPage: React.FC = () => {
   const [sbtLoading, setSbtLoading] = useState<boolean>(false);
   const [refreshingElections, setRefreshingElections] = useState<boolean>(false);
 
+  const [noOfElections, setNoOfElections] = useState<number>(0);
+  const [noOfActiveElections, setNoOfActiveElections] = useState<number>(0);
+  const [noOfCompletedElections, setNoOfCompletedElections] = useState<number>(0);
+  const [noOfVoters, setNoOfVoters] = useState<string>('');
+
   // Clear messages after some time
   useEffect(() => {
     if (error || success) {
@@ -100,7 +105,9 @@ const VotingPage: React.FC = () => {
         setSbtContract(sbtTokenContract);
         const contractAdmin = await sbtTokenContract.getAdminAddress();
         setAdmin(contractAdmin);
-
+        const voterCount = await sbtTokenContract.getVoterCount();
+        setNoOfVoters(voterCount.toString());
+        console.log(voterCount);
         // Listen for account changes
         window.ethereum.on('accountsChanged', handleAccountsChanged);
 
@@ -198,6 +205,15 @@ const VotingPage: React.FC = () => {
 
       for (let i = 1; i <= electionCount; i++) {
         const election = await contract.elections(i);
+        console.log(election);
+        if (election.isActive) {
+          setNoOfActiveElections(noOfActiveElections + 1);
+          console.log('active elections');
+        } else if (election.isCompleted) {
+          setNoOfCompletedElections(noOfCompletedElections + 1);
+          console.log('completed elections');
+        }
+        setNoOfElections(noOfElections + 1);
         const [ids, names, voteCounts] = await contract.getCandidates(i);
         const candidates: Candidate[] = ids.map((id: any, index: number) => ({
           id: Number(id),
@@ -292,18 +308,21 @@ const VotingPage: React.FC = () => {
     try {
       setTransactionLoading('getPendingApps', true);
       const applicantCount = await sbtContract.getApplicantCount();
+      console.log(applicantCount);
       const pendingApplications = [];
       for (let i = 0; i < applicantCount; i++) {
         const applicant = await sbtContract.getApplicantByIndex(i);
+        console.log(i, applicant);
         const [hasApplied, isRegistered] = await sbtContract.getApplicationStatus(applicant);
         if (hasApplied && !isRegistered) {
           pendingApplications.push(applicant);
+          console.log(pendingApplications);
         }
       }
       setApplications(pendingApplications);
     } catch (err: any) {
       setError('Failed to fetch pending applications');
-      toast.error('Failed to fetch pending applications');
+      console.log(err)
     } finally {
       setTransactionLoading('getPendingApps', false);
     }
@@ -391,48 +410,21 @@ const VotingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-center mb-2">ZK Voting System</h1>
-          <p className="text-center text-gray-600">Secure, Private, and Verifiable Elections</p>
-        </div>
 
-        <div className="flex justify-between items-center mb-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 flex items-center justify-between">
           <div>
-            {account ? (
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                <p className="text-sm">
-                  Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-gray-300 mr-2"></div>
-                <p className="text-sm text-gray-500">Not connected</p>
-              </div>
-            )}
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+              ZK Voting System
+            </h1>
+            <p className="text-gray-500 mt-2">Decentralized Voting System</p>
           </div>
-          <Button
-            onClick={connectWallet}
-            variant={account ? "outline" : "default"}
-            disabled={txLoading['connectWallet']}
-          >
-            {txLoading['connectWallet'] ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
-            ) : account ? (
-              "Connected"
-            ) : (
-              "Connect Wallet"
-            )}
-          </Button>
+          <div className="text-right">
+            <div className="px-4 py-2 bg-gray-100 rounded-lg">
+              <p className="text-sm text-gray-600">Connected Account</p>
+              <p className="font-mono text-sm">{account.slice(0, 6)}...{account.slice(-4)}</p>
+            </div>
+          </div>
         </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-6 flex items-start">
-            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-            <p>{error}</p>
-          </div>
-        )}
 
         {success && (
           <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg mb-6 flex items-start">
@@ -442,15 +434,146 @@ const VotingPage: React.FC = () => {
         )}
 
         <Tabs defaultValue="home" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8">
-            <TabsTrigger value="home">Home</TabsTrigger>
-            <TabsTrigger value="elections">Elections</TabsTrigger>
-            <TabsTrigger value="create">Create</TabsTrigger>
-            <TabsTrigger value="sbt">SBT</TabsTrigger>
+          <TabsList className="flex w-full rounded-full bg-white shadow-sm border border-gray-100 p-0 mb-16">
+            <TabsTrigger
+              value="home"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none rounded-l-full"
+            >
+              <Home className="w-4 h-4" />
+              <span className="font-medium">Home</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="elections"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none"
+            >
+              <Send className="w-4 h-4" />
+              <span className="font-medium">Elections</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="create"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none"
+            >
+              <Wallet className="w-4 h-4" />
+              <span className="font-medium">Create Election</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="sbt"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none rounded-r-full"
+            >
+              <Users className="w-4 h-4" />
+              <span className="font-medium">SBT</span>
+            </TabsTrigger>
             {admin?.toLowerCase() === account?.toLowerCase() && (
-              <TabsTrigger value="admin">Admin</TabsTrigger>
+              <TabsTrigger
+                value="admin"
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none rounded-r-full"
+              >
+                <Users className="w-4 h-4" />
+                <span className="font-medium">Admin</span>
+              </TabsTrigger>
             )}
           </TabsList>
+
+          <TabsContent value="home">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    Welcome to Zero Knowledge Proof Voting System
+                  </CardTitle>
+                  <CardDescription>
+                    A decentralized system for transparent voting
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-gray-600">
+                    The Zero Knowledge Proof Voting System is a decentralized application that enables transparent and secure voting through a zero knowledge proof system and SBT token.
+                  </p>
+                  <div className="space-y-4 mt-6">
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <Shield className="w-6 h-6 text-green-600 mt-1" />
+                      <div>
+                        <h3 className="font-semibold">Zero-Knowledge Voting & SBT Verification</h3>
+                        <p className="text-sm text-gray-600">Anonymous voting through nullifier hashes and ZK proofs, with required Soul Bound Tokens for participation, ensuring verified users can vote securely.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <Users className="w-6 h-6 text-blue-600 mt-1" />
+                      <div>
+                        <h3 className="font-semibold">Candidate Application System</h3>
+                        <p className="text-sm text-gray-600">Allows eligible SBT holders to apply as candidates with dedicated admin approval process, creating a fair and transparent nomination workflow.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <FileCheck className="w-6 h-6 text-purple-600 mt-1" />
+                      <div>
+                        <h3 className="font-semibold">Comprehensive Election Management</h3>
+                        <p className="text-sm text-gray-600">Full election lifecycle from creation to results, with transparent candidate registration, configurable voting periods, and auditable outcomes.</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-green-600" />
+                    Current Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-yellow-50 rounded-lg">
+                      <p className="text-sm text-yellow-600">Total Elections</p>
+                      <p className="text-2xl font-bold text-yellow-700">{noOfElections.toString()}</p>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-600">Total Active Elections</p>
+                      <p className="text-2xl font-bold text-blue-700">{noOfActiveElections.toString()}</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <p className="text-sm text-green-600">Total Completed Elections</p>
+                      <p className="text-2xl font-bold text-green-700">{noOfCompletedElections.toString()}</p>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded-lg">
+                      <p className="text-sm text-red-600">Total Voters</p>
+                      <p className="text-2xl font-bold text-red-700">{noOfVoters.toString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <h3 className="font-semibold mb-2">Your Role</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {admin?.toLowerCase() === account?.toLowerCase() && (
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <Shield className="w-4 h-4" />
+                          <span>Contract Owner</span>
+                        </div>
+
+                      )}
+                      {userApplication?.isRegistered && (
+                        <div className="p-4 bg-orange-50 rounded-lg">
+                          <UserCheck className="w-4 h-4" />
+                          <span>Authority Member</span>
+                        </div>
+                      )}
+                      {!userApplication?.isRegistered && (
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <Users className="w-4 h-4" />
+                          <span>Regular User</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           <TabsContent value="elections">
             <Card>

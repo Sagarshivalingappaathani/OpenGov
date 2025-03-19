@@ -78,4 +78,8 @@ contract VoterSBT is ERC721, Ownable {
         require(voterData[_address].isRegistered, "Address not registered");
         return voterData[_address].nullifier;
     }
+
+    function getVoterCount() public view returns (uint128) {
+        return _tokenIdCounter - 1;
+    }
 }

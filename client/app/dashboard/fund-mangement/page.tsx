@@ -567,21 +567,39 @@ export default function FundManagement() {
         </div>
 
         <Tabs defaultValue="home" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-white shadow-sm rounded-lg p-1">
-            <TabsTrigger value="home" className="flex items-center gap-2">
-              <Home className="w-4 h-4" /> Home
+          <TabsList className="flex w-full rounded-full bg-white shadow-sm border border-gray-100 p-0 mb-16">
+            <TabsTrigger
+              value="home"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none rounded-l-full"
+            >
+              <Home className="w-4 h-4" />
+              <span className="font-medium">Home</span>
             </TabsTrigger>
-            <TabsTrigger value="proposals" className="flex items-center gap-2">
-              <Send className="w-4 h-4" /> Proposals
+
+            <TabsTrigger
+              value="proposals"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none"
+            >
+              <Send className="w-4 h-4" />
+              <span className="font-medium">Proposals</span>
             </TabsTrigger>
-            <TabsTrigger value="deposit" className="flex items-center gap-2">
-              <Wallet className="w-4 h-4" /> Deposit
+
+            <TabsTrigger
+              value="deposit"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none"
+            >
+              <Wallet className="w-4 h-4" />
+              <span className="font-medium">Deposit</span>
             </TabsTrigger>
-            <TabsTrigger value="authorities" className="flex items-center gap-2">
-              <Users className="w-4 h-4" /> Authorities
+
+            <TabsTrigger
+              value="authorities"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 text-gray-500 hover:text-gray-800 transition-colors data-[state=active]:text-black data-[state=active]:bg-gray-50 data-[state=active]:border-b-2 data-[state=active]:border-black data-[state=active]:shadow-none rounded-r-full"
+            >
+              <Users className="w-4 h-4" />
+              <span className="font-medium">Authorities</span>
             </TabsTrigger>
           </TabsList>
-
           <TabsContent value="home">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
@@ -825,9 +843,9 @@ export default function FundManagement() {
                         <TableRow key={proposal.id}>
                           <TableCell className="font-mono">#{proposal.id}</TableCell>
 
-                          <TableCell className="max-w-xs truncate">
+                          <TableCell className="max-w-xs break-words">
                             <div className="space-y-1">
-                              <p>{proposal.description}</p>
+                              <p className="whitespace-normal">{proposal.description}</p>
                               {proposal.stageDetails?.stageReport && (
                                 <div>
                                   <Button
@@ -1079,7 +1097,7 @@ export default function FundManagement() {
           </TabsContent>
         </Tabs>
       </div>
-      
+
       {/*See Report deails Dailog Box*/}
       <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
         <DialogContent className="sm:max-w-md">

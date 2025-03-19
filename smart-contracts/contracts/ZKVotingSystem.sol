@@ -5,7 +5,6 @@ import "hardhat/console.sol";
 
 interface IVoterSBT {
     function isRegisteredVoter(address voter) external view returns (bool);
-    
 }
 
 interface IVerifier {
@@ -21,9 +20,19 @@ contract ZKVotingSystem {
     IVoterSBT public voterSBT;
     IVerifier public verifier;
 
+    struct CandidateApplication {
+        address applicant;
+        string name;
+        string details;
+        bool processed;
+        bool approved;
+    }
+
     struct Candidate {
         uint id;
+        address candidateAddress;
         string name;
+        string details;
         uint voteCount;
     }
 
@@ -38,6 +47,8 @@ contract ZKVotingSystem {
         mapping(uint => Candidate) candidates;
         mapping(uint256 => bool) nullifierHashes;
         uint256 voterCount;
+        mapping(address => CandidateApplication) candidateApplications;
+        address[] applicantList;
     }
 
     uint public electionCount;
@@ -45,6 +56,8 @@ contract ZKVotingSystem {
 
     event VoteCast(uint indexed electionId, uint256 nullifierHash);
     event DebugLog(string message);
+    event CandidateApplicationSubmitted(uint indexed electionId, address applicant, string name);
+    event CandidateApplicationProcessed(uint indexed electionId, address applicant, bool approved);
 
     modifier onlyAdmin(uint _electionId) {
         require(
@@ -58,6 +71,14 @@ contract ZKVotingSystem {
         require(
             bytes(elections[_electionId].name).length > 0,
             "Election does not exist"
+        );
+        _;
+    }
+
+    modifier hasSBT() {
+        require(
+            voterSBT.isRegisteredVoter(msg.sender),
+            "Must have a valid SBT token"
         );
         _;
     }
@@ -78,20 +99,120 @@ contract ZKVotingSystem {
         newElection.endTime = 0;
     }
 
+    function applyAsCandidate(
+        uint _electionId,
+        string memory _name,
+        string memory _details
+    ) public electionExists(_electionId) hasSBT {
+        Election storage election = elections[_electionId];
+        require(!election.isActive, "Cannot apply after election has started");
+        require(!election.isCompleted, "Election has already been completed");
+        
+        // Check if applicant has already applied
+        require(
+            bytes(election.candidateApplications[msg.sender].name).length == 0,
+            "You have already applied for this election"
+        );
+        
+        // Store the application
+        election.candidateApplications[msg.sender] = CandidateApplication({
+            applicant: msg.sender,
+            name: _name,
+            details: _details,
+            processed: false,
+            approved: false
+        });
+
+        election.applicantList.push(msg.sender);
+        
+        emit CandidateApplicationSubmitted(_electionId, msg.sender, _name);
+    }
+    
+    function getApplicationsCount(uint _electionId) 
+        public 
+        view 
+        electionExists(_electionId) 
+        returns (uint) 
+    {
+        return elections[_electionId].applicantList.length;
+    }
+    
+    function getApplicationDetails(uint _electionId, uint _index) 
+        public 
+        view 
+        electionExists(_electionId) 
+        onlyAdmin(_electionId)
+        returns (address, string memory, string memory, bool, bool) 
+    {
+        Election storage election = elections[_electionId];
+        require(_index < election.applicantList.length, "Invalid application index");
+        
+        address applicant = election.applicantList[_index];
+        CandidateApplication storage application = election.candidateApplications[applicant];
+        
+        return (
+            application.applicant,
+            application.name,
+            application.details,
+            application.processed,
+            application.approved
+        );
+    }
+    
+    function processApplication(
+        uint _electionId,
+        address _applicant,
+        bool _approved
+    ) public electionExists(_electionId) onlyAdmin(_electionId) {
+        Election storage election = elections[_electionId];
+        require(!election.isActive, "Cannot process applications after election has started");
+        
+        CandidateApplication storage application = election.candidateApplications[_applicant];
+        require(bytes(application.name).length > 0, "Application does not exist");
+        require(!application.processed, "Application already processed");
+        
+        application.processed = true;
+        application.approved = _approved;
+        
+        if (_approved) {
+            // Add as a candidate
+            election.candidateCount++;
+            election.candidates[election.candidateCount] = Candidate({
+                id: election.candidateCount,
+                candidateAddress: _applicant,
+                name: application.name,
+                details: application.details,
+                voteCount: 0
+            });
+        }
+        
+        emit CandidateApplicationProcessed(_electionId, _applicant, _approved);
+    }
+
     function addCandidate(
         uint _electionId,
-        string memory _name
+        address _candidateAddress,
+        string memory _name,
+        string memory _details
     ) public electionExists(_electionId) onlyAdmin(_electionId) {
         Election storage election = elections[_electionId];
         require(
             !election.isActive,
             "Cannot add candidates after election has started"
         );
+        
+        // Check if candidate has a valid SBT
+        require(
+            voterSBT.isRegisteredVoter(_candidateAddress),
+            "Candidate must have a valid SBT token"
+        );
 
         election.candidateCount++;
         election.candidates[election.candidateCount] = Candidate(
             election.candidateCount,
+            _candidateAddress,
             _name,
+            _details,
             0
         );
     }
@@ -102,6 +223,7 @@ contract ZKVotingSystem {
         Election storage election = elections[_electionId];
         require(!election.isActive, "Election is already active");
         require(!election.isCompleted, "Election has already been completed");
+        require(election.candidateCount > 0, "No candidates registered for the election");
 
         election.isActive = true;
         election.startTime = block.timestamp;
@@ -164,23 +286,27 @@ contract ZKVotingSystem {
         public
         view
         electionExists(_electionId)
-        returns (uint[] memory, string[] memory, uint[] memory)
+        returns (uint[] memory, address[] memory, string[] memory, string[] memory, uint[] memory)
     {
         Election storage election = elections[_electionId];
         uint candidateCount = election.candidateCount;
 
         uint[] memory ids = new uint[](candidateCount);
+        address[] memory addresses = new address[](candidateCount);
         string[] memory names = new string[](candidateCount);
+        string[] memory details = new string[](candidateCount);
         uint[] memory voteCounts = new uint[](candidateCount);
 
         for (uint i = 1; i <= candidateCount; i++) {
             Candidate storage candidate = election.candidates[i];
             ids[i - 1] = candidate.id;
+            addresses[i - 1] = candidate.candidateAddress;
             names[i - 1] = candidate.name;
+            details[i - 1] = candidate.details;
             voteCounts[i - 1] = candidate.voteCount;
         }
 
-        return (ids, names, voteCounts);
+        return (ids, addresses, names, details, voteCounts);
     }
 
     function getVoterCount(
@@ -210,6 +336,8 @@ contract ZKVotingSystem {
         returns (
             string memory,
             uint[] memory,
+            address[] memory,
+            string[] memory,
             string[] memory,
             uint[] memory,
             uint256,
@@ -221,20 +349,26 @@ contract ZKVotingSystem {
 
         uint candidateCount = election.candidateCount;
         uint[] memory ids = new uint[](candidateCount);
+        address[] memory addresses = new address[](candidateCount);
         string[] memory names = new string[](candidateCount);
+        string[] memory details = new string[](candidateCount);
         uint[] memory voteCounts = new uint[](candidateCount);
 
         for (uint i = 1; i <= candidateCount; i++) {
             Candidate storage candidate = election.candidates[i];
             ids[i - 1] = candidate.id;
+            addresses[i - 1] = candidate.candidateAddress;
             names[i - 1] = candidate.name;
+            details[i - 1] = candidate.details;
             voteCounts[i - 1] = candidate.voteCount;
         }
 
         return (
             election.name,
             ids,
+            addresses,
             names,
+            details,
             voteCounts,
             election.startTime,
             election.endTime
@@ -247,5 +381,17 @@ contract ZKVotingSystem {
         console.log("Nullifier Hash:", _nullifierHash);
         console.log("Nullifier Hash Exists:", elections[_electionId].nullifierHashes[_nullifierHash]);
         return elections[_electionId].nullifierHashes[_nullifierHash];
+    }
+
+    function hasApplied(uint _electionId, address _applicant) public view electionExists(_electionId) returns (bool) {
+        //check if the applicant is in the applicant list
+        for (uint i = 0; i < elections[_electionId].applicantList.length; i++) {
+            console.log("Applicant:", elections[_electionId].applicantList[i]);
+            console.log("Applicant:", _applicant);
+            if (elections[_electionId].applicantList[i] == _applicant) {
+                return true;
+            }
+        }
+        return false;
     }
 }
