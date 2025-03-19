@@ -1,7 +1,0 @@
-# Environment files
-.env
-*/**.env
-client/.env
-smart-contract/.env
-smart-contracts/.env 
-node_modules/
