@@ -121,7 +121,7 @@ Here are some snapshots of the Open Government Platform in action:
 - **Election List**  
   ![Election List](Screenshots/election-list.png)
   
-- **Election Administration(Application For SBT Tokens**  
+- **Election Administration(Application For SBT Tokens)**  
   ![Election Admin](Screenshots/election-admin.png)
 
 - **Election Candidate Applications**  
