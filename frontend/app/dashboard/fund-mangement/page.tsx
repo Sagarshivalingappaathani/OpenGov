@@ -74,6 +74,8 @@ export default function FundManagement() {
   const [newRequiredApprovals, setNewRequiredApprovals] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [stageReport, setStageReport] = useState('');
+  const [stageReportId, setStageReportId] = useState<number>(0);
+
   const [errors, setErrors] = useState({
     deposit: '',
     proposal: {
@@ -87,9 +89,10 @@ export default function FundManagement() {
   const [selectedReport, setSelectedReport] = useState('');
 
   // Add this function to your component
-  const openReportModal = (report: any) => {
+  const openReportModal = (report: any, id: number) => {
     setSelectedReport(report);
     setReportModalOpen(true);
+    setStageReportId(id);
   };
 
   // Form states
@@ -852,7 +855,7 @@ export default function FundManagement() {
                                     variant="ghost"
                                     size="sm"
                                     className="text-xs text-blue-600 p-0 h-auto hover:bg-transparent hover:underline"
-                                    onClick={() => openReportModal(proposal.stageDetails?.stageReport)}
+                                    onClick={() => openReportModal(proposal.stageDetails?.stageReport, proposal?.id)}
                                   >
                                     See Report Details
                                   </Button>
@@ -1102,7 +1105,7 @@ export default function FundManagement() {
       <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Stage Report</DialogTitle>
+            <DialogTitle>Stage Report of Proposal #{stageReportId}</DialogTitle>
           </DialogHeader>
           <div className="p-4 bg-gray-50 rounded-md">
             <p className="whitespace-pre-wrap">{selectedReport}</p>

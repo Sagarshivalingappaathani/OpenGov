@@ -202,18 +202,20 @@ const VotingPage: React.FC = () => {
       setRefreshingElections(true);
       const electionCount = await contract.electionCount();
       const electionsList: Election[] = [];
-
+      let noOfActiveElections = 0;
+      let noOfCompletedElections = 0;
+      let noOfElections = 0;
       for (let i = 1; i <= electionCount; i++) {
         const election = await contract.elections(i);
         console.log(election);
         if (election.isActive) {
-          setNoOfActiveElections(noOfActiveElections + 1);
+          noOfActiveElections++;
           console.log('active elections');
         } else if (election.isCompleted) {
-          setNoOfCompletedElections(noOfCompletedElections + 1);
+          noOfCompletedElections++;
           console.log('completed elections');
         }
-        setNoOfElections(noOfElections + 1);
+        noOfElections++;
         const [ids, names, voteCounts] = await contract.getCandidates(i);
         const candidates: Candidate[] = ids.map((id: any, index: number) => ({
           id: Number(id),
@@ -234,7 +236,9 @@ const VotingPage: React.FC = () => {
           candidates
         });
       }
-
+      setNoOfElections(noOfElections);
+      setNoOfActiveElections(noOfActiveElections);
+      setNoOfCompletedElections(noOfCompletedElections);
       setElections(electionsList);
     } catch (err: any) {
       setError('Failed to load elections');

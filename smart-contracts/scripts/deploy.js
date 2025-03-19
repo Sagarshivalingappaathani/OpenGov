@@ -44,7 +44,7 @@ async function main() {
                      `NEXT_PUBLIC_VOTING_CONTRACT_ADDRESS=${zkVotingSystemAddress}\n` +
                      `NEXT_PUBLIC_PUBLIC_FUND_TREASURY_ADDRESS=${publicKeyRegistryAddress}\n`;
 
-  fs.writeFileSync("/home/sagar0418/0418/OpenGovernment-2/client/.env", envContent);
+  fs.writeFileSync("/home/sagar0418/0418/OpenGov/frontend/.env", envContent);
 
   console.log(".env file updated successfully!");
 
