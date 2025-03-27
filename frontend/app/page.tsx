@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle, Coins, Wallet, Vote } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getPublicFundingContract as getFundingContract } from "@/lib/publicFundingContract";
+import { getContract as getVotingContract } from "@/lib/votingContract";
 
 declare global {
   interface Window {
@@ -15,10 +17,83 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  
+  // Contract data states
+  const [treasuryBalance, setTreasuryBalance] = useState<string>("0");
+  const [proposalCount, setProposalCount] = useState<number>(0);
+  const [activeVotes, setActiveVotes] = useState<number>(0);
+  const [recentProposals, setRecentProposals] = useState<any[]>([]);
 
   useEffect(() => {
     checkIfWalletIsConnected();
   }, []);
+
+  useEffect(() => {
+    if (isConnected && account) {
+      fetchContractData();
+    }
+  }, [isConnected, account]);
+
+  const fetchContractData = async () => {
+    try {
+      // Get contract instances
+      const fundingContract = await getFundingContract();
+      const votingContract = await getVotingContract();
+      
+      // Fetch funding contract data
+      const balanceWei = await fundingContract.getTreasuryBalance();
+      const balance = (parseFloat(balanceWei.toString()) / 1e18).toFixed(2);
+      setTreasuryBalance(balance);
+      
+      const proposals = await fundingContract.proposalCount();
+      setProposalCount(Number(proposals));
+      
+      // Fetch voting contract data
+      const electionCount = await votingContract.electionCount();
+      let activeElectionCount = 0;
+      
+      // Count active elections
+      for (let i = 1; i <= Number(electionCount); i++) {
+        const election = await votingContract.elections(i);
+        if (election.isActive && !election.isCompleted) {
+          activeElectionCount++;
+        }
+      }
+      setActiveVotes(activeElectionCount);
+      
+      // Fetch recent proposals (up to 3)
+      const recentProposalsData = [];
+      const startIndex = Math.max(1, Number(proposals) - 2); // Get last 3 proposals
+      
+      for (let i = startIndex; i <= Number(proposals); i++) {
+        try {
+          const proposalData = {
+            id: i,
+            description: "",
+            amount: "0"
+          };
+          
+          // For each proposal, we need multiple calls to get all data
+          // First get the basic proposal info
+          const proposalDescription = await fundingContract.proposals(i); // This will return what's available in the struct
+          proposalData.description = proposalDescription.description || `Proposal ${i}`;
+          
+          // Convert the amount from wei to ETH
+          const amountWei = proposalDescription.amount || 0;
+          proposalData.amount = (parseFloat(amountWei.toString()) / 1e18).toFixed(1);
+          
+          recentProposalsData.push(proposalData);
+        } catch (err) {
+          console.error(`Error fetching proposal ${i}:`, err);
+        }
+      }
+      
+      setRecentProposals(recentProposalsData);
+      
+    } catch (error) {
+      console.error("Error fetching contract data:", error);
+    }
+  };
 
   const checkIfWalletIsConnected = async () => {
     try {
@@ -94,7 +169,7 @@ export default function Home() {
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Link href="/dashboard/fund-mangement">
+                  <Link href="/dashboard/fund-management">
                     <Button size="lg" className="gap-2 w-full sm:w-auto">
                       <Coins className="w-4 h-4" />
                       Fund Management
@@ -145,7 +220,7 @@ export default function Home() {
             </div>
           </div>
           
-          {/* Right side illustration */}
+          {/* Right side illustration - Now with real data */}
           <div className="flex-1 relative">
             <div className="bg-white p-6 rounded-xl shadow-lg">
               <div className="flex justify-between items-center mb-4">
@@ -156,7 +231,7 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Funds</span>
-                  <span className="font-bold">125.45 ETH</span>
+                  <span className="font-bold">{treasuryBalance} ETH</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div className="bg-blue-600 h-2 rounded-full" style={{ width: '65%' }}></div>
@@ -168,30 +243,30 @@ export default function Home() {
                       <Vote className="w-4 h-4 text-blue-500" />
                       <span className="text-sm font-medium">Active Votes</span>
                     </div>
-                    <span className="text-xl font-bold">12</span>
+                    <span className="text-xl font-bold">{activeVotes}</span>
                   </div>
                   <div className="border border-gray-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Coins className="w-4 h-4 text-blue-500" />
                       <span className="text-sm font-medium">Proposals</span>
                     </div>
-                    <span className="text-xl font-bold">24</span>
+                    <span className="text-xl font-bold">{proposalCount}</span>
                   </div>
                 </div>
                 
                 <div className="pt-2">
-                  <div className="flex items-center justify-between py-2 border-t border-gray-100">
-                    <span className="text-sm">Road Construction</span>
-                    <span className="text-sm font-medium">15.5 ETH</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-t border-gray-100">
-                    <span className="text-sm">Community Garden</span>
-                    <span className="text-sm font-medium">5.2 ETH</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-t border-gray-100">
-                    <span className="text-sm">Public WiFi</span>
-                    <span className="text-sm font-medium">8.7 ETH</span>
-                  </div>
+                  {recentProposals.length > 0 ? (
+                    recentProposals.map((proposal, index) => (
+                      <div key={proposal.id} className="flex items-center justify-between py-2 border-t border-gray-100">
+                        <span className="text-sm truncate w-3/4">{proposal.description}</span>
+                        <span className="text-sm font-medium">{proposal.amount} ETH</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-center py-4 text-gray-500 italic">
+                      No proposals found
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

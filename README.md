@@ -125,16 +125,13 @@ Here are some snapshots of the Open Government Platform in action:
   ![Election Admin](Screenshots/election-admin.png)
 
 - **Election Candidate Applications**  
-  ![Election Candidate Applications](Screenshots/election-candidate-applications.png)
-
-- **Election Candidates Application Status**  
-  ![Election Candidates Application Status](Screenshots/election-candiadtes-application-status.png)
+  ![Election Candidate Applications](Screenshots/election-candidate-approve.png)
 
 - **Election Vote**  
-  ![Election Vote](Screenshots/elction-vote.png)
+  ![Election Vote](Screenshots/election-vote.png)
 
 - **Election Results**  
-  ![Election Results](Screenshots/elction-results.png)
+  ![Election Results](Screenshots/election-result.png)
 
 ### Public Fund Management
 - **PFM Home**  
@@ -148,3 +145,4 @@ Here are some snapshots of the Open Government Platform in action:
 
 - **PFM Reports**  
   ![PFM Reports](Screenshots/pfm-report.png)
+  
