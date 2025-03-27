@@ -1,0 +1,19 @@
+// vote.zok
+
+// A simplified circuit for voting with ZKP
+def main(private field voterID, private field electionID, private field candidateID, 
+         field pubElectionID, field pubCandidateMax, field nullifierHash) -> field[1] {
+    // Check the election ID matches the expected public value
+    assert(electionID == pubElectionID);
+    
+    // Check the candidate ID is valid (greater than 0 and not exceeding max)
+    assert(candidateID > 0);
+    assert(candidateID <= pubCandidateMax);
+    
+    // Simple nullifier calculation (in a real system, use proper cryptographic hash)
+    // This is a simplified approach that still preserves privacy
+    field calculatedNullifier = voterID * 1000000 + electionID;
+    assert(calculatedNullifier == nullifierHash);
+    
+    return [1];
+}

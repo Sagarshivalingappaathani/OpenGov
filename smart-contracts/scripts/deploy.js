@@ -1,58 +1,62 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
+const fs = require("fs");
+require("dotenv").config();
 
 async function main() {
-  try {
-    // Get the network
-    const { network } = hre;
-    
-    // Get the contract factory
-    const VotingSystem = await hre.ethers.getContractFactory("VotingSystem");
-    console.log("Deploying VotingSystem...");
-    
-    // Deploy the contract
-    const votingSystem = await VotingSystem.deploy();
-    
-    // Wait for deployment transaction to be mined
-    await votingSystem.waitForDeployment();
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying contracts with the account:", deployer.address);
 
-    // Get the deployed contract address
-    const votingSystemAddress = await votingSystem.getAddress();
-    console.log("VotingSystem deployed to:", votingSystemAddress);
-    
-    // Verify the contract on Etherscan (if not on a local network)
-    if (network.config.chainId !== 31337 && process.env.ETHERSCAN_API_KEY) {
-      console.log("Waiting for block confirmations...");
-      // Wait for 6 blocks after deployment
-      await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
-      
-      await verify(votingSystemAddress, []);
-    }
-  } catch (error) {
-    console.error("Deployment failed:", error);
-    throw error;
-  }
+  // Deploy VoterSBT contract
+  console.log("Deploying VoterSBT...");
+  const VoterSBT = await ethers.getContractFactory("VoterSBT");
+  const voterSBT = await VoterSBT.deploy();
+  await voterSBT.waitForDeployment();
+  const voterSBTAddress = await voterSBT.getAddress();
+  console.log("VoterSBT deployed to:", voterSBTAddress);
+
+  // Deploy Verifier contract
+  console.log("Deploying Verifier...");
+  const Verifier = await ethers.getContractFactory("Groth16Verifier");
+  const verifier = await Verifier.deploy();
+  await verifier.waitForDeployment();
+  const verifierAddress = await verifier.getAddress();
+  console.log("Verifier deployed to:", verifierAddress);
+
+  // Deploy ZKVotingSystem contract
+  console.log("Deploying ZKVotingSystem...");
+  const ZKVotingSystem = await ethers.getContractFactory("ZKVotingSystem");
+  const zkVotingSystem = await ZKVotingSystem.deploy(voterSBTAddress, verifierAddress);
+  await zkVotingSystem.waitForDeployment();
+  const zkVotingSystemAddress = await zkVotingSystem.getAddress();
+  console.log("ZKVotingSystem deployed to:", zkVotingSystemAddress);
+
+  // Deploy PublicKeyRegistry contract
+  console.log("Deploying PublicKeyRegistry...");
+  const PublicKeyRegistry = await ethers.getContractFactory("PublicFundTreasury");
+  const publicKeyRegistry = await PublicKeyRegistry.deploy(2);
+  await publicKeyRegistry.waitForDeployment();
+  const publicKeyRegistryAddress = await publicKeyRegistry.getAddress();
+  console.log("PublicKeyRegistry deployed to:", publicKeyRegistryAddress);
+
+  // Update .env file
+  const envContent = `NEXT_PUBLIC_SBT_TOKEN_ADDRESS=${voterSBTAddress}\n` +
+                     `NEXT_PUBLIC_VERIFIER_CONTRACT_ADDRESS=${verifierAddress}\n` +
+                     `NEXT_PUBLIC_VOTING_CONTRACT_ADDRESS=${zkVotingSystemAddress}\n` +
+                     `NEXT_PUBLIC_PUBLIC_FUND_TREASURY_ADDRESS=${publicKeyRegistryAddress}\n`;
+
+  fs.writeFileSync("/home/sagar0418/0418/OpenGov/frontend/.env", envContent);
+
+  console.log(".env file updated successfully!");
+
+  console.log("\nDeployment Summary:");
+  console.log("-------------------");
+  console.log("VoterSBT:         ", voterSBTAddress);
+  console.log("Verifier:         ", verifierAddress);
+  console.log("ZKVotingSystem:   ", zkVotingSystemAddress);
+  console.log("PublicKeyRegistry:", publicKeyRegistryAddress);
 }
 
-async function verify(contractAddress, args) {
-  console.log("Verifying contract...");
-  try {
-    await hre.run("verify:verify", {
-      address: contractAddress,
-      constructorArguments: args,
-    });
-  } catch (e) {
-    if (e.message.toLowerCase().includes("already verified")) {
-      console.log("Already verified!");
-    } else {
-      console.log("Verification error:", e);
-    }
-  }
-}
-
-// Execute deployment
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

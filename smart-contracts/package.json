@@ -20,6 +20,9 @@
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "dotenv": "^16.4.7"
+    "@openzeppelin/contracts": "^4.9.3",
+    "circomlib": "^2.0.5",
+    "dotenv": "^16.4.7",
+    "hardhat-circom": "^3.3.2"
   }
 }
